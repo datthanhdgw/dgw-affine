@@ -1452,7 +1452,6 @@ type NotificationWorkspaceType {
 }
 
 enum OAuthProviderType {
-  Apple
   GitHub
   Google
   OIDC
