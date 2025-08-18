@@ -28,12 +28,12 @@ const NONCE_LENGTH = 12;
 const AUTH_TAG_LENGTH = 12;
 
 function generatePrivateKey(): string {
-  const { privateKey } = generateKeyPairSync('ec', {
-    namedCurve: 'prime256v1',
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
   });
 
   const key = privateKey.export({
-    type: 'sec1',
+    type: 'pkcs8',
     format: 'pem',
   });
 
@@ -42,7 +42,8 @@ function generatePrivateKey(): string {
 
 function generatePublicKey(privateKey: string) {
   return createPublicKey({
-    key: Buffer.from(privateKey),
+    key: privateKey,
+    format: 'pem',
   })
     .export({ format: 'pem', type: 'spki' })
     .toString('utf8');
@@ -86,8 +87,20 @@ export class CryptoHelper implements OnModuleInit {
   }
 
   private setup() {
-    const privateKey = this.config.crypto.privateKey || generatePrivateKey();
-    const publicKey = generatePublicKey(privateKey);
+    let privateKey = this.config.crypto.privateKey || generatePrivateKey();
+    let publicKey: string;
+
+    try {
+      publicKey = generatePublicKey(privateKey);
+    } catch (error) {
+      // If the existing private key is incompatible, generate a new one
+      this.logger.warn(
+        'Invalid private key detected, generating new RSA key pair:',
+        error instanceof Error ? error.message : String(error)
+      );
+      privateKey = generatePrivateKey();
+      publicKey = generatePublicKey(privateKey);
+    }
 
     this.keyPair = {
       publicKey: Buffer.from(publicKey),
@@ -114,7 +127,7 @@ export class CryptoHelper implements OnModuleInit {
     const verify = createVerify('rsa-sha256');
     verify.update(data, 'utf-8');
     verify.end();
-    return verify.verify(this.keyPair.privateKey, signature, 'base64');
+    return verify.verify(this.keyPair.publicKey, signature, 'base64');
   }
 
   encrypt(data: string) {
